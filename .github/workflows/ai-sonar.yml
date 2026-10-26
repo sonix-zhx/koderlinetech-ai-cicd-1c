@@ -1,0 +1,101 @@
+name: ИИ-разбор замечаний BSL LS
+
+# Только комментарий в PR, статус не выставляется.
+# Здесь отчёт строится на лету BSL Language Server.
+# С живым SonarQube отчёт берётся через API вместо шагов 1-2:
+#   GET <sonar>/api/issues/search?componentKeys=<проект>&pullRequest=<номер>&resolved=false
+
+on:
+  pull_request:
+    paths: ["**/*.bsl"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Ревью и разбор одного PR идут по очереди: бесплатная модель не любит параллельные запросы
+concurrency:
+  group: ai-agent-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  sonar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      OPENCODE_PERMISSION: '{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny"}'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-opencode
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 25
+
+      - name: 1. Скачать BSL Language Server
+        # Проверить при первом прогоне: имя файла в релизе (*exec.jar)
+        run: |
+          url=$(curl -fsSL -H "Authorization: Bearer $GH_TOKEN" \
+            https://api.github.com/repos/1c-syntax/bsl-language-server/releases/latest \
+            | jq -r '.assets[] | select(.name | endswith("exec.jar")) | .browser_download_url' | head -n 1)
+          echo "BSL LS: $url"
+          curl -fsSL -o bsl-ls.jar "$url"
+
+      - name: 2. Анализ
+        run: |
+          mkdir -p bsl-report
+          java -version 2>&1 | head -n 1 > bsl.log
+          java -Xmx2g -jar bsl-ls.jar analyze --srcDir src \
+            --reporter json --outputDir bsl-report --silent >> bsl.log 2>&1
+
+      - name: 3. Оставить замечания по изменённым в PR файлам
+        run: |
+          git -c core.quotepath=false diff --name-only \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            -- '*.bsl' > changed.txt
+          # В отчёте пути в виде file:///...; кириллица закодирована, строки с нуля
+          jq --rawfile changed changed.txt '
+            ($changed | split("\n") | map(select(length > 0))) as $files
+            | [ .fileinfos[] as $i
+                | $files[] as $f
+                | select($i.path | endswith($f | split("/") | map(@uri) | join("/")))
+                | $i.diagnostics[]
+                | {"файл": $f, "строка": (.range.start.line + 1), "уровень": .severity,
+                   "код": .code, "сообщение": .message} ]
+          ' bsl-report/bsl-json.json > bsl-filtered.json
+          echo "Замечаний по изменённым файлам: $(jq length bsl-filtered.json)"
+
+      - name: 4. Разбор агентом
+        run: |
+          if [ "$(jq length bsl-filtered.json)" -eq 0 ]; then
+            echo "BSL Language Server не нашёл замечаний в изменённых файлах." > review.md
+          else
+            # Бесплатная модель иногда отвечает пусто — одна повторная попытка
+            for attempt in 1 2; do
+              { cat .github/prompts/sonar.md; printf '\n\n```json\n'; cat bsl-filtered.json; printf '\n```\n'; } \
+                | timeout 300 opencode run 2>opencode.err \
+                | .github/scripts/clean-output.sh '^## Итог' > review.md
+              grep -q '^## Итог' review.md && break
+            done
+            # opencode run выходит с кодом 0 даже при ошибке — если ответа нет, показываем stderr
+            if ! grep -q '^## Итог' review.md; then
+              { echo '**Ошибка запуска агента:**'; echo '```'; sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' opencode.err | tail -n 20; echo '```'; } >> review.md
+            fi
+          fi
+
+      - name: 5. Комментарий в PR
+        run: .github/scripts/post-comment.sh ai-sonar review.md
+
+      - name: Сообщить об ошибке в PR
+        if: failure()
+        run: |
+          { echo '**Пайплайн разбора упал.** Хвост лога:'; echo '```'
+            tail -n 30 bsl.log opencode.err 2>/dev/null || true; echo '```'; } > error.md
+          .github/scripts/post-comment.sh ai-sonar error.md

@@ -1,0 +1,28 @@
+name: Установка OpenCode
+description: Node.js, OpenCode CLI и модель из opencode.json
+
+inputs:
+  version:
+    description: Версия пакета opencode-ai (закреплена для воспроизводимости)
+    default: "1.19.4"
+
+outputs:
+  model:
+    description: Модель из opencode.json (единственное место настройки)
+    value: ${{ steps.model.outputs.value }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: 22
+
+    - name: Установка CLI
+      shell: bash
+      run: npm install -g opencode-ai@${{ inputs.version }}
+
+    - name: Модель из opencode.json
+      id: model
+      shell: bash
+      run: echo "value=$(jq -r .model opencode.json)" >> "$GITHUB_OUTPUT"

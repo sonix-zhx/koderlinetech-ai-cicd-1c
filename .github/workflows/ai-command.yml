@@ -1,0 +1,56 @@
+name: ИИ-команда /opencode
+
+# Комментарий /opencode ... (или /oc ...) в PR запускает агента из готовой
+# интеграции OpenCode. Правки агент коммитит в ветку PR отдельным коммитом.
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+env:
+  # Кроме автора PR команды могут давать эти пользователи (через запятую).
+  # Контекст env недоступен в job.if, поэтому проверка сделана шагом gate.
+  OPENCODE_OWNERS: sonix-zhx
+
+jobs:
+  command:
+    if: >-
+      (github.event.issue.pull_request != null || github.event_name == 'pull_request_review_comment')
+      && (contains(github.event.comment.body, '/opencode') || contains(github.event.comment.body, '/oc'))
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # обмен OIDC на токен GitHub App OpenCode
+      contents: read
+    steps:
+      - name: gate. Автор PR или ответственный
+        id: gate
+        env:
+          ACTOR: ${{ github.event.comment.user.login }}
+          AUTHOR: ${{ github.event.issue.user.login || github.event.pull_request.user.login }}
+        run: |
+          if [ "$ACTOR" = "$AUTHOR" ] || [[ ",$OPENCODE_OWNERS," == *",$ACTOR,"* ]]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Пользователь $ACTOR не может вызывать агента"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.allowed == 'true'
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Модель из opencode.json
+        id: model
+        if: steps.gate.outputs.allowed == 'true'
+        run: echo "value=$(jq -r .model opencode.json)" >> "$GITHUB_OUTPUT"
+
+      - uses: anomalyco/opencode/github@latest
+        if: steps.gate.outputs.allowed == 'true'
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+        with:
+          model: ${{ steps.model.outputs.value }}

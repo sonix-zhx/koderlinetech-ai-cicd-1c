@@ -1,0 +1,65 @@
+name: ИИ-описание релиза
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    # Начальный тег v1.0.0 описания не требует: предыдущего релиза нет
+    if: github.ref_name != 'v1.0.0'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      # Агент читает историю сам: разрешён только git на чтение
+      OPENCODE_PERMISSION: >-
+        {"edit":"deny","webfetch":"deny","bash":{"*":"deny","git log":"allow",
+        "git log *":"allow","git show *":"allow","git diff *":"allow"}}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-opencode
+
+      - name: Диапазон коммитов от предыдущего тега
+        run: |
+          prev=$(git describe --tags --abbrev=0 --match 'v*' "$TAG^" 2>/dev/null || true)
+          echo "RANGE=${prev:+$prev..}$TAG" >> "$GITHUB_ENV"
+
+      - name: Описание релиза агентом
+        # Проверить при первом прогоне: срабатывание разрешений git у агента
+        run: |
+          { cat .github/prompts/release-notes.md
+            printf '\nТег: %s\nДиапазон коммитов: %s\n' "$TAG" "$RANGE"; } > task.md
+          opencode run < task.md 2>opencode.err \
+            | .github/scripts/clean-output.sh '^### Для разработчиков' > notes.md
+          # opencode run выходит с кодом 0 даже при ошибке модели — показываем её явно
+          if grep -qi 'error' opencode.err; then
+            { echo '**Ошибка запуска агента:**'; echo '```'; sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' opencode.err | tail -n 20; echo '```'; } >> notes.md
+          fi
+
+      - name: GitHub Release
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases" \
+            -f tag_name="$TAG" -f name="$TAG" -F body=@notes.md
+
+      - name: Коммит в CHANGELOG.md
+        run: |
+          git fetch origin main
+          git checkout -B main origin/main
+          { echo "# Журнал изменений"; echo
+            echo "## $TAG ($(date +%F))"; echo
+            cat notes.md; echo
+            tail -n +3 CHANGELOG.md; } > CHANGELOG.new
+          mv CHANGELOG.new CHANGELOG.md
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "Журнал изменений: $TAG"
+          git push origin main

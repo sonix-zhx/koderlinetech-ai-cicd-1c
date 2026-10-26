@@ -1,0 +1,62 @@
+name: ИИ-ревью
+
+on:
+  pull_request:
+    paths: ["**/*.bsl"]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# Ревью и разбор одного PR идут по очереди: бесплатная модель не любит параллельные запросы
+concurrency:
+  group: ai-agent-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+      # Ключ Zen. Для PR из форков секрет недоступен, job упадёт.
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      # Агент ничего не читает и не запускает: всё нужное уже в сообщении
+      OPENCODE_PERMISSION: '{"edit":"deny","bash":"deny","webfetch":"deny","websearch":"deny"}'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-opencode
+
+      - name: Diff по BSL-файлам
+        run: |
+          git -c core.quotepath=false diff \
+            "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" \
+            -- '*.bsl' > diff.patch
+
+      - name: Ревью агентом
+        run: |
+          # Промпт и diff передаём одним сообщением через stdin
+          # Бесплатная модель иногда отвечает пусто — одна повторная попытка
+          for attempt in 1 2; do
+            { cat .github/prompts/review.md; printf '\n\n```diff\n'; cat diff.patch; printf '```\n'; } \
+              | timeout 300 opencode run 2>opencode.err \
+              | .github/scripts/clean-output.sh '^## Итог' > review.md
+            grep -q '^## Итог' review.md && break
+          done
+          # opencode run выходит с кодом 0 даже при ошибке — если ответа нет, показываем stderr
+          if ! grep -q '^## Итог' review.md; then
+            { echo '**Ошибка запуска агента:**'; echo '```'; sed -E 's/\x1B\[[0-9;]*[A-Za-z]//g' opencode.err | tail -n 20; echo '```'; } >> review.md
+          fi
+
+      - name: Комментарий в PR
+        run: .github/scripts/post-comment.sh ai-review review.md
+
+      - name: Статус по вердикту агента
+        run: |
+          verdict=$(grep -E '^VERDICT: (PASS|FAIL)' review.md | tail -n 1 || true)
+          echo "Вердикт: ${verdict:-не найден}"
+          case "$verdict" in "VERDICT: PASS"*) ;; *) exit 1 ;; esac
