@@ -1,0 +1,8 @@
+{
+  "language": "ru",
+  "diagnostics": {
+    "parameters": {
+      "CommonModuleInvalidType": false
+    }
+  }
+}

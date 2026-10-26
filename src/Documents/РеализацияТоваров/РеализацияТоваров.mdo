@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Document xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="5c08012d-d5cc-46c0-ae61-104876c54bf9">
+  <name>РеализацияТоваров</name>
+  <synonym>
+    <key>ru</key>
+    <value>Реализация товаров</value>
+  </synonym>
+  <attributes uuid="c16f539e-b533-46ec-842c-01b863dfd20a">
+    <name>Контрагент</name>
+    <type>
+      <types>CatalogRef.Контрагенты</types>
+    </type>
+  </attributes>
+  <attributes uuid="026b2aa3-d03e-4fd8-8cf8-1bf468073b8b">
+    <name>Склад</name>
+    <type>
+      <types>CatalogRef.Склады</types>
+    </type>
+  </attributes>
+  <attributes uuid="8bf7106f-25bd-413f-9ee1-c1f73aef1fd7">
+    <name>СуммаДокумента</name>
+    <type>
+      <types>Number</types>
+      <numberQualifiers>
+        <precision>15</precision>
+        <scale>2</scale>
+      </numberQualifiers>
+    </type>
+  </attributes>
+  <tabularSections uuid="6dbae3a1-c66e-44b4-bb70-6b5f2d25e264">
+    <name>Товары</name>
+  </tabularSections>
+  <forms uuid="4a0a1d6d-2ea9-488e-ba28-a08db7e49b08">
+    <name>ФормаДокумента</name>
+  </forms>
+</mdclass:Document>

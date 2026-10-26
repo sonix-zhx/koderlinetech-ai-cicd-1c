@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Catalog xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="d2463bbb-08fc-4a5c-b854-002d9c2f683e">
+  <name>Контрагенты</name>
+  <synonym>
+    <key>ru</key>
+    <value>Контрагенты</value>
+  </synonym>
+  <attributes uuid="8947a910-8c44-4c27-b6bc-999e558349ce">
+    <name>ИНН</name>
+    <type>
+      <types>String</types>
+      <stringQualifiers>
+        <length>12</length>
+      </stringQualifiers>
+    </type>
+  </attributes>
+  <attributes uuid="c7a1c1a4-7b03-4220-a2dd-1d0c057fde53">
+    <name>ПроцентСкидки</name>
+    <type>
+      <types>Number</types>
+      <numberQualifiers>
+        <precision>5</precision>
+        <scale>2</scale>
+      </numberQualifiers>
+    </type>
+  </attributes>
+</mdclass:Catalog>

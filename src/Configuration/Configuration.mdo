@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mdclass:Configuration xmlns:mdclass="http://g5.1c.ru/v8/dt/metadata/mdclass" uuid="19cc8f60-4652-4524-94fe-d8a3f5c60fd7">
+  <name>ДемоПродажи</name>
+  <synonym>
+    <key>ru</key>
+    <value>Демо: Продажи</value>
+  </synonym>
+  <defaultRunMode>ManagedApplication</defaultRunMode>
+  <scriptVariant>Russian</scriptVariant>
+  <compatibilityMode>8.3.24</compatibilityMode>
+  <commonModules>CommonModule.Продажи</commonModules>
+  <commonModules>CommonModule.ИнтеграцияСайт</commonModules>
+  <constants>Constant.АдресСайта</constants>
+  <constants>Constant.ПользовательСайта</constants>
+  <catalogs>Catalog.Контрагенты</catalogs>
+  <documents>Document.РеализацияТоваров</documents>
+  <informationRegisters>InformationRegister.ЦеныНоменклатуры</informationRegisters>
+  <accumulationRegisters>AccumulationRegister.ТоварыНаСкладах</accumulationRegisters>
+</mdclass:Configuration>
