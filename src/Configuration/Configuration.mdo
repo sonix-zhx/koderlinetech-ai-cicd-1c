@@ -10,6 +10,7 @@
   <compatibilityMode>8.3.24</compatibilityMode>
   <commonModules>CommonModule.Продажи</commonModules>
   <commonModules>CommonModule.ИнтеграцияСайт</commonModules>
+  <commonModules>CommonModule.ОтчётностьПродаж</commonModules>
   <constants>Constant.АдресСайта</constants>
   <constants>Constant.ПользовательСайта</constants>
   <catalogs>Catalog.Контрагенты</catalogs>
